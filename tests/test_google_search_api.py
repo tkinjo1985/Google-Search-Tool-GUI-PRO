@@ -16,7 +16,7 @@ import os
 # プロジェクトのsrcディレクトリをパスに追加
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from google_search_api import GoogleSearchAPI, APIError, RateLimitError
+from src.google_search_api import GoogleSearchAPI, APIError, RateLimitError
 
 
 class TestGoogleSearchAPI(unittest.TestCase):

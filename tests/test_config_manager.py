@@ -14,9 +14,12 @@ import sys
 from pathlib import Path
 
 # プロジェクトのsrcディレクトリをパスに追加
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+src_path = os.path.join(os.path.dirname(__file__), '..', 'src')
+src_path = os.path.abspath(src_path)
+if src_path not in sys.path:
+    sys.path.insert(0, src_path)
 
-from config_manager import ConfigManager
+from src.config_manager import ConfigManager
 
 
 class TestConfigManager(unittest.TestCase):

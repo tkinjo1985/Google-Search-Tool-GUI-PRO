@@ -17,12 +17,12 @@ import requests
 # プロジェクトのsrcディレクトリをパスに追加
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from search_tool import SearchTool
-from config_manager import ConfigManager
-from google_search_api import GoogleSearchAPI, APIError
-from search_engine import SearchEngine
-from csv_writer import CSVWriter
-from search_result import SearchResult
+from src.search_tool import SearchTool
+from src.config_manager import ConfigManager
+from src.google_search_api import GoogleSearchAPI, APIError
+from src.search_engine import SearchEngine
+from src.csv_writer import CSVWriter
+from src.search_result import SearchResult
 
 
 class TestIntegration(unittest.TestCase):

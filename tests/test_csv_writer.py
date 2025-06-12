@@ -17,8 +17,8 @@ import sys
 # プロジェクトのsrcディレクトリをパスに追加
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from csv_writer import CSVWriter, CSVWriterError
-from search_result import SearchResult
+from src.csv_writer import CSVWriter, CSVWriterError
+from src.search_result import SearchResult
 
 
 class TestCSVWriter(unittest.TestCase):
