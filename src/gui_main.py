@@ -27,6 +27,13 @@ from PyQt6.QtGui import QAction, QFont, QIcon, QTextCursor
 # プロジェクトのsrcディレクトリをパスに追加
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# Virtual Table Widget のインポート
+try:
+    from .virtual_table_widget import VirtualTableWidget
+except ImportError:
+    # 直接実行時は絶対インポートを使用
+    from virtual_table_widget import VirtualTableWidget
+
 from search_tool import SearchTool
 from config_manager import ConfigManager
 from search_result import SearchResult
@@ -563,8 +570,7 @@ class GoogleSearchGUI(QMainWindow):
         self.num_results_spinbox.setToolTip("1回の検索で取得する結果数（1-10件）")
         search_layout.addWidget(self.num_results_spinbox)
         
-        search_layout.addStretch()
-        
+        search_layout.addStretch()        
         layout.addWidget(search_group)
         
         # 設定保存ボタン
@@ -584,39 +590,23 @@ class GoogleSearchGUI(QMainWindow):
         self.tab_widget.addTab(settings_widget, "設定")
         
     def create_results_tab(self):
-        """結果タブの作成"""
+        """結果タブの作成（Virtual Table使用）"""
         results_widget = QWidget()
         layout = QVBoxLayout(results_widget)
         
-        # 結果統計
-        stats_layout = QHBoxLayout()
-        self.total_results_label = QLabel("総結果数: 0")
-        stats_layout.addWidget(self.total_results_label)
-        stats_layout.addStretch()
+        # Virtual Table Widget を使用
+        self.virtual_table = VirtualTableWidget(
+            enable_pagination=False,  # 必要に応じて有効化
+            page_size=1000,
+            parent=self
+        )
         
-        # 結果クリアボタン
-        clear_results_btn = QPushButton("結果をクリア")
-        clear_results_btn.clicked.connect(self.clear_results)
-        stats_layout.addWidget(clear_results_btn)
+        # Virtual Tableのシグナル接続
+        self.virtual_table.rowSelected.connect(self._onResultRowSelected)
+        self.virtual_table.dataChanged.connect(self._onResultDataChanged)
+        self.virtual_table.filterChanged.connect(self._onResultFilterChanged)
         
-        layout.addLayout(stats_layout)
-          # 結果テーブル
-        self.results_table = QTableWidget()
-        self.results_table.setColumnCount(6)
-        self.results_table.setHorizontalHeaderLabels([
-            "キーワード", "順位", "タイトル", "URL", "スニペット", "検索時刻"
-        ])
-          # テーブルの列幅を調整
-        header = self.results_table.horizontalHeader()
-        header.setStretchLastSection(False)
-        self.results_table.setColumnWidth(0, 150)  # キーワード
-        self.results_table.setColumnWidth(1, 60)   # 順位
-        self.results_table.setColumnWidth(2, 250)  # タイトル
-        self.results_table.setColumnWidth(3, 300)  # URL
-        self.results_table.setColumnWidth(4, 350)  # スニペット
-        self.results_table.setColumnWidth(5, 150)  # 時刻
-        
-        layout.addWidget(self.results_table)
+        layout.addWidget(self.virtual_table)
         
         # 保存ボタン
         save_layout = QHBoxLayout()
@@ -626,6 +616,12 @@ class GoogleSearchGUI(QMainWindow):
         save_csv_btn.clicked.connect(self.save_results)
         save_csv_btn.setStyleSheet("QPushButton { background-color: #FF9800; color: white; font-weight: bold; padding: 10px; }")
         save_layout.addWidget(save_csv_btn)
+        
+        # 結果クリアボタン
+        clear_results_btn = QPushButton("結果をクリア")
+        clear_results_btn.clicked.connect(self.clear_results)
+        clear_results_btn.setStyleSheet("QPushButton { background-color: #f44336; color: white; font-weight: bold; padding: 10px; }")
+        save_layout.addWidget(clear_results_btn)
         
         layout.addLayout(save_layout)
         
@@ -749,8 +745,7 @@ class GoogleSearchGUI(QMainWindow):
                 "過去1日": "d1",
                 "過去1週間": "w1",
                 "過去1ヶ月": "m1",
-                "過去3ヶ月": "m3",
-                "過去6ヶ月": "m6",
+                "過去3ヶ月": "m3",                "過去6ヶ月": "m6",
                 "過去1年": "y1",
                 "過去2年": "y2",
                 "過去5年": "y5",
@@ -784,23 +779,29 @@ class GoogleSearchGUI(QMainWindow):
         self.progress_label.setText(message)
         
     def add_result(self, result: dict):
-        """結果を追加"""
+        """結果を追加（Virtual Table使用）"""
         self.search_results.append(result)
-          # テーブルに追加
-        row = self.results_table.rowCount()
-        self.results_table.insertRow(row)
         
-        self.results_table.setItem(row, 0, QTableWidgetItem(result['keyword']))
-        self.results_table.setItem(row, 1, QTableWidgetItem(str(result.get('rank', 1))))
-        self.results_table.setItem(row, 2, QTableWidgetItem(result['title']))
-        self.results_table.setItem(row, 3, QTableWidgetItem(result['url']))
-        self.results_table.setItem(row, 4, QTableWidgetItem(result['snippet']))
-        self.results_table.setItem(row, 5, QTableWidgetItem(result['timestamp']))
-        
-        # 統計更新
-        self.total_results_label.setText(f"総結果数: {len(self.search_results)}")
+        # Virtual Table に結果を追加
+        self.virtual_table.addResult(result)
         
         self.log_message(f"結果取得: {result['keyword']} -> {result['title']}")
+    
+    def _onResultRowSelected(self, row: int, data: dict):
+        """結果行選択時のハンドラー"""
+        self.log_message(f"行選択: {data.get('キーワード', 'N/A')}")
+    
+    def _onResultDataChanged(self, count: int):
+        """結果データ変更時のハンドラー"""
+        # 従来のtotal_results_labelは削除済みなので、ログのみ
+        self.log_message(f"表示データ更新: {count:,} 件")
+    
+    def _onResultFilterChanged(self, filter_text: str, filtered_count: int):
+        """結果フィルタ変更時のハンドラー"""
+        if filter_text:
+            self.log_message(f"フィルタ適用: '{filter_text}' - {filtered_count:,} 件")
+        else:
+            self.log_message(f"フィルタクリア: {filtered_count:,} 件表示")
         
     def search_finished(self, results: List[dict]):
         """検索完了"""
@@ -809,8 +810,7 @@ class GoogleSearchGUI(QMainWindow):
         
         self.log_message(f"検索完了: {len(results)} 件の結果")
         
-        # 結果タブに切り替え
-        self.tab_widget.setCurrentIndex(1)
+        # 結果タブに切り替え        self.tab_widget.setCurrentIndex(1)
         
         if results:
             QMessageBox.information(
@@ -819,7 +819,7 @@ class GoogleSearchGUI(QMainWindow):
             )
         else:
             QMessageBox.warning(self, "検索完了", "検索結果が見つかりませんでした。")
-            
+        
     def show_error(self, error_message: str):
         """エラー表示"""
         self.log_message(f"エラー: {error_message}")
@@ -829,10 +829,9 @@ class GoogleSearchGUI(QMainWindow):
         self.stop_search()
         
     def clear_results(self):
-        """結果をクリア"""
+        """結果をクリア（Virtual Table使用）"""
         self.search_results.clear()
-        self.results_table.setRowCount(0)
-        self.total_results_label.setText("総結果数: 0")
+        self.virtual_table.clearData()
         self.log_message("検索結果をクリアしました")
         
     def save_results(self):
