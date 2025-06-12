@@ -1,0 +1,12 @@
+# Google Search Tool - GUI版 依存関係
+
+# Core dependencies
+requests==2.31.0          # HTTP requests for Google API
+python-dotenv==1.0.0       # Environment variable management
+chardet==5.2.0             # Character encoding detection
+
+# GUI framework
+PyQt6>=6.6.1               # GUI framework (required)
+
+# Build tools (optional)
+pyinstaller>=6.0.0         # EXE build tool

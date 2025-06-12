@@ -1,0 +1,20 @@
+{
+  "google_api": {
+    "api_key": "YOUR_GOOGLE_API_KEY_HERE",
+    "custom_search_engine_id": "YOUR_CUSTOM_SEARCH_ENGINE_ID_HERE"
+  },
+  "output": {
+    "directory": "output",
+    "filename_prefix": "search_results"
+  },
+  "logging": {
+    "level": "INFO",
+    "file_path": "logs/search.log",
+    "console_output": true
+  },  "search": {
+    "retry_count": 3,
+    "retry_delay": 1.0,
+    "timeout": 10,
+    "num": 1
+  }
+}
