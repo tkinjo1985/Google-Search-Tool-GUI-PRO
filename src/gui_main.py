@@ -44,6 +44,25 @@ def get_resource_path(relative_path):
     return os.path.join(base_path, relative_path)
 
 
+# アイコンキャッシュ（起動最適化）
+_icon_cache = {}
+
+def get_cached_icon(icon_path):
+    """アイコンのキャッシュ機能付き取得"""
+    if icon_path in _icon_cache:
+        return _icon_cache[icon_path]
+    
+    if os.path.exists(icon_path):
+        try:
+            icon = QIcon(icon_path)
+            _icon_cache[icon_path] = icon
+            return icon
+        except Exception:
+            pass
+    
+    return None
+
+
 class SearchWorker(QThread):
     """検索処理を別スレッドで実行するワーカークラス"""
     # シグナル定義
@@ -159,88 +178,36 @@ class GoogleSearchGUI(QMainWindow):
         self.load_config()
         
     def init_ui(self):
-        """UIの初期化"""
+        """UIの初期化（起動最適化済み）"""
         self.setWindowTitle("Google Search Tool - PRO")
-        self.setGeometry(100, 100, 1200, 800)        # アイコンを設定
-        # PyInstallerでのEXE実行時も考慮したパス取得
+        self.setGeometry(100, 100, 1200, 800)
+        
+        # アイコンを設定（キャッシュ付き）
         icon_path = get_resource_path(os.path.join('icon', 'app_icon.ico'))
         
-        print(f"🔍 アイコンパス: {icon_path}")
-        print(f"📁 アイコンファイル存在: {os.path.exists(icon_path)}")
-        if os.path.exists(icon_path):
-            file_size = os.path.getsize(icon_path)
-            print(f"📏 アイコンファイルサイズ: {file_size} bytes")
-            try:
-                icon = QIcon(icon_path)
-                self.setWindowIcon(icon)
-                print("✅ ウィンドウアイコン設定完了")
-            except Exception as e:
-                print(f"❌ ウィンドウアイコン設定エラー: {e}")
+        cached_icon = get_cached_icon(icon_path)
+        if cached_icon:
+            self.setWindowIcon(cached_icon)
+            print("✅ ウィンドウアイコン設定完了（キャッシュ使用）")
         else:
             print("❌ アイコンファイルが見つかりません")
         
-        # アプリケーションのスタイルを設定
+        # 軽量なスタイル設定（必要最小限）
         self.setStyleSheet("""
-            QMainWindow {
-                background-color: #f5f5f5;
+            QMainWindow { background-color: #f5f5f5; }
+            QGroupBox { 
+                font-weight: bold; border: 2px solid #cccccc; 
+                border-radius: 10px; margin-top: 1ex; padding-top: 10px; 
             }
-            QGroupBox {
-                font-weight: bold;
-                border: 2px solid #cccccc;
-                border-radius: 10px;
-                margin-top: 1ex;
-                padding-top: 10px;
+            QLineEdit { 
+                padding: 8px; border: 1px solid #ddd; 
+                border-radius: 4px; font-size: 14px; 
             }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px 0 5px;
+            QLineEdit:focus { border-color: #4CAF50; }
+            QProgressBar { 
+                border: 2px solid #cccccc; border-radius: 5px; text-align: center; 
             }
-            QLineEdit {
-                padding: 8px;
-                border: 1px solid #ddd;
-                border-radius: 4px;
-                font-size: 14px;
-            }
-            QLineEdit:focus {
-                border-color: #4CAF50;
-            }
-            QTextEdit {
-                border: 1px solid #ddd;
-                border-radius: 4px;
-                font-family: 'Courier New', monospace;
-            }
-            QProgressBar {
-                border: 2px solid #cccccc;
-                border-radius: 5px;
-                text-align: center;
-            }
-            QProgressBar::chunk {
-                background-color: #4CAF50;
-                border-radius: 3px;
-            }
-            QTableWidget {
-                gridline-color: #ddd;
-                font-size: 12px;
-            }
-            QTableWidget::item {
-                padding: 8px;
-            }
-            QTabWidget::pane {
-                border: 1px solid #cccccc;
-                border-radius: 4px;
-            }
-            QTabBar::tab {
-                background-color: #e0e0e0;
-                padding: 8px 16px;
-                margin-right: 2px;
-                border-top-left-radius: 4px;
-                border-top-right-radius: 4px;
-            }
-            QTabBar::tab:selected {
-                background-color: #4CAF50;
-                color: white;
-            }
+            QProgressBar::chunk { background-color: #4CAF50; border-radius: 3px; }
         """)
         
         # メインウィジェット
@@ -671,8 +638,7 @@ class GoogleSearchGUI(QMainWindow):
             # 現在のテキストを取得
             current_text = self.keywords_text.toPlainText()
             keywords = [k.strip() for k in current_text.split('\n') if k.strip()]
-            
-            # 重複チェック
+              # 重複チェック
             if keyword not in keywords:
                 keywords.append(keyword)
                 self.keywords_text.setPlainText('\n'.join(keywords))
@@ -688,22 +654,47 @@ class GoogleSearchGUI(QMainWindow):
         self.log_message("キーワードリストをクリアしました")
         
     def load_keywords_file(self):
-        """キーワードファイルを読み込み"""
+        """キーワードファイルを読み込み（ストリーミング処理で最適化）"""
         file_path, _ = QFileDialog.getOpenFileName(
             self, "キーワードファイルを選択", "", "テキストファイル (*.txt);;すべてのファイル (*)"
         )
         
         if file_path:
             try:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    content = f.read()
+                # ファイルサイズを確認
+                file_size = os.path.getsize(file_path)
+                self.log_message(f"ファイル読み込み開始: {os.path.basename(file_path)} ({file_size:,} bytes)")
                 
-                keywords = [k.strip() for k in content.split('\n') if k.strip()]
+                keywords = []
+                
+                # 大きなファイルはストリーミング処理、小さなファイルは一括処理
+                if file_size > 1024 * 1024:  # 1MB以上の場合
+                    self.log_message("大きなファイルです。ストリーミング処理を開始...")
+                    
+                    # バッファサイズを最適化（64KB）
+                    buffer_size = 64 * 1024
+                    
+                    with open(file_path, 'r', encoding='utf-8', buffering=buffer_size) as f:
+                        for line_number, line in enumerate(f, 1):
+                            keyword = line.strip()
+                            if keyword:
+                                keywords.append(keyword)
+                            
+                            # 進捗表示（10000行ごと）
+                            if line_number % 10000 == 0:
+                                self.log_message(f"読み込み進捗: {line_number:,} 行処理済み")
+                else:
+                    # 小さなファイルは従来通り一括処理
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    keywords = [k.strip() for k in content.split('\n') if k.strip()]
+                
                 self.keywords_text.setPlainText('\n'.join(keywords))
-                self.log_message(f"ファイルから {len(keywords)} 個のキーワードを読み込みました: {file_path}")
+                self.log_message(f"ファイルから {len(keywords):,} 個のキーワードを読み込みました: {file_path}")
                 
             except Exception as e:
                 QMessageBox.critical(self, "エラー", f"ファイル読み込みエラー: {str(e)}")
+                self.log_message(f"ファイル読み込みエラー: {str(e)}")
                 
     def browse_output_dir(self):
         """出力ディレクトリを選択"""
@@ -845,7 +836,7 @@ class GoogleSearchGUI(QMainWindow):
         self.log_message("検索結果をクリアしました")
         
     def save_results(self):
-        """結果を保存"""
+        """結果を保存（ストリーミング処理で最適化）"""
         if not self.search_results:
             QMessageBox.warning(self, "警告", "保存する結果がありません。")
             return
@@ -860,18 +851,13 @@ class GoogleSearchGUI(QMainWindow):
         
         if file_path:
             try:
-                import csv
-                  # CSV形式で保存
-                with open(file_path, 'w', newline='', encoding='utf-8-sig') as csvfile:
-                    fieldnames = ['keyword', 'rank', 'title', 'url', 'snippet', 'timestamp']
-                    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-                    
-                    # ヘッダー行を書き込み
-                    writer.writeheader()
-                    
-                    # データ行を書き込み
-                    for result in self.search_results:
-                        writer.writerow(result)
+                # 大量データの場合はストリーミング処理を使用
+                if len(self.search_results) > 1000:
+                    self.log_message(f"大量データです。ストリーミング処理で保存中... ({len(self.search_results):,} 件)")
+                    self._save_results_streaming(file_path)
+                else:
+                    # 小さなデータは従来通り
+                    self._save_results_standard(file_path)
                 
                 QMessageBox.information(self, "保存完了", f"結果を保存しました:\n{file_path}")
                 self.log_message(f"結果を保存: {file_path}")
@@ -879,11 +865,62 @@ class GoogleSearchGUI(QMainWindow):
             except Exception as e:
                 QMessageBox.critical(self, "エラー", f"保存エラー: {str(e)}")
                 self.log_message(f"保存エラー: {str(e)}")
+    
+    def _save_results_standard(self, file_path: str):
+        """標準的なCSV保存処理"""
+        import csv
+        
+        with open(file_path, 'w', newline='', encoding='utf-8-sig') as csvfile:
+            fieldnames = ['keyword', 'rank', 'title', 'url', 'snippet', 'timestamp']
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            
+            # ヘッダー行を書き込み
+            writer.writeheader()
+            
+            # データ行を書き込み
+            for result in self.search_results:
+                writer.writerow(result)
+    
+    def _save_results_streaming(self, file_path: str):
+        """ストリーミングCSV保存処理（大量データ対応）"""
+        import csv
+        
+        # バッファサイズを最適化（64KB）
+        buffer_size = 64 * 1024
+        batch_size = 1000  # バッチサイズ
+        
+        with open(file_path, 'w', newline='', encoding='utf-8-sig', buffering=buffer_size) as csvfile:
+            fieldnames = ['keyword', 'rank', 'title', 'url', 'snippet', 'timestamp']
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            
+            # ヘッダー行を書き込み
+            writer.writeheader()
+            
+            # バッチ処理でデータを書き込み
+            batch = []
+            for i, result in enumerate(self.search_results):
+                batch.append(result)
+                
+                # バッチサイズに達したら書き込み
+                if len(batch) >= batch_size:
+                    writer.writerows(batch)
+                    csvfile.flush()  # バッファを強制的にフラッシュ
+                    batch = []
+                    
+                    # 進捗ログ（10000行ごと）
+                    if (i + 1) % 10000 == 0:
+                        self.log_message(f"保存進捗: {i + 1:,} / {len(self.search_results):,} 行")
+              # 残りのバッチを書き込み
+            if batch:
+                writer.writerows(batch)
+                csvfile.flush()
                 
     def load_config(self):
-        """設定を読み込み"""
+        """設定を読み込み（キャッシュ最適化済み）"""
         try:
-            self.config_manager = ConfigManager(skip_validation=True)
+            # キャッシュ機能付きで設定を読み込み
+            from config_manager import get_cached_config
+            self.config_manager = get_cached_config(None, skip_validation=True)
             config = self.config_manager.config_data
             
             # API設定

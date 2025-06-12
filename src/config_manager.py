@@ -8,19 +8,23 @@
 import json
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Dict, Any, Optional
 from dotenv import load_dotenv
 
 
+# 設定キャッシュ（起動最適化）
+_config_cache = {}
+_config_file_timestamps = {}
+
+
 class ConfigManager:
     """設定管理クラス"""
     
-    def get_user_config_path(self) -> str:
-        """ユーザー固有の設定ファイルパスを取得する（EXE実行時用）"""
-        # Windows: %APPDATA%/GoogleSearchTool/config.json
-        # その他: ~/.googlesearchtool/config.json
-        
+    @staticmethod
+    def get_user_config_path_static() -> str:
+        """ユーザー固有の設定ファイルパスを取得する（静的メソッド版）"""
         if os.name == 'nt':  # Windows
             appdata = os.getenv('APPDATA', os.path.expanduser('~'))
             config_dir = os.path.join(appdata, 'GoogleSearchTool')
@@ -29,6 +33,10 @@ class ConfigManager:
         
         os.makedirs(config_dir, exist_ok=True)
         return os.path.join(config_dir, 'config.json')
+    
+    def get_user_config_path(self) -> str:
+        """ユーザー固有の設定ファイルパスを取得する（EXE実行時用）"""
+        return self.get_user_config_path_static()
     
     def __init__(self, config_file_path: Optional[str] = None, skip_validation: bool = False):
         """
@@ -392,6 +400,46 @@ class ConfigManager:
         return os.path.join(base_path, self.config_file_path)
 
 
+_config_cache = {}
+_config_file_timestamps = {}
+
+def get_cached_config(config_file_path: str, skip_validation: bool = False) -> 'ConfigManager':
+    """
+    設定のキャッシュ機能付き取得
+    
+    Args:
+        config_file_path: 設定ファイルパス
+        skip_validation: 検証スキップフラグ
+        
+    Returns:
+        ConfigManagerインスタンス
+    """
+    cache_key = f"{config_file_path}_{skip_validation}"
+    
+    # ファイルの変更時刻をチェック
+    if os.path.exists(config_file_path):
+        current_mtime = os.path.getmtime(config_file_path)
+        cached_mtime = _config_file_timestamps.get(cache_key, 0)
+        
+        # ファイルが変更されていない場合はキャッシュを使用
+        if cache_key in _config_cache and current_mtime <= cached_mtime:
+            return _config_cache[cache_key]
+        
+        # キャッシュを更新
+        config = ConfigManager(config_file_path, skip_validation)
+        _config_cache[cache_key] = config
+        _config_file_timestamps[cache_key] = current_mtime
+        
+        return config
+    else:
+        # ファイルが存在しない場合は新規作成
+        config = ConfigManager(config_file_path, skip_validation)
+        _config_cache[cache_key] = config
+        _config_file_timestamps[cache_key] = 0
+        
+        return config
+
+
 def create_sample_config_file(file_path: str = "config/config.json") -> None:
     """サンプル設定ファイルを作成する"""
     sample_config = {
@@ -442,3 +490,36 @@ if __name__ == "__main__":
         print(f"設定エラー: {e}")
         print("サンプル設定ファイルを作成します...")
         create_sample_config_file()
+
+
+def get_cached_config(config_file_path: Optional[str] = None, skip_validation: bool = False) -> 'ConfigManager':
+    """キャッシュ機能付き設定読み込み"""
+    # キャッシュキーを生成
+    cache_key = f"{config_file_path}_{skip_validation}"
+    
+    # ファイルパスを決定
+    if config_file_path is None:
+        if hasattr(sys, '_MEIPASS'):
+            config_file_path = ConfigManager.get_user_config_path_static()
+        else:
+            config_file_path = "config/config.json"
+    
+    # ファイルの更新時刻をチェック
+    current_timestamp = 0
+    if os.path.exists(config_file_path):
+        current_timestamp = os.path.getmtime(config_file_path)
+    
+    # キャッシュされた設定があり、ファイルが更新されていない場合はキャッシュを返す
+    if (cache_key in _config_cache and 
+        cache_key in _config_file_timestamps and
+        _config_file_timestamps[cache_key] == current_timestamp):
+        return _config_cache[cache_key]
+    
+    # 新しい設定を読み込み
+    config_manager = ConfigManager(config_file_path, skip_validation)
+    
+    # キャッシュに保存
+    _config_cache[cache_key] = config_manager
+    _config_file_timestamps[cache_key] = current_timestamp
+    
+    return config_manager

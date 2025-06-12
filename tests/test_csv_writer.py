@@ -271,6 +271,91 @@ class TestCSVWriter(unittest.TestCase):
                 self.assertIsInstance(parsed_datetime, datetime)
             except ValueError:
                 self.fail(f"日時フォーマットが不正です: {datetime_str}")
+    
+    def test_streaming_write_performance(self):
+        """ストリーミング書き込みのパフォーマンステスト"""
+        # 大量のテストデータを生成（5000件）
+        large_results = []
+        for i in range(5000):
+            result = SearchResult(
+                title=f"大量データテストタイトル{i}",
+                url=f"https://example{i}.com",
+                snippet=f"これは大量データテスト用のスニペット{i}です。" * 5,
+                search_query=f"大量データテストクエリ{i}",
+                rank=1,
+                display_link=f"example{i}.com"
+            )
+            large_results.append(result)
+        
+        # ストリーミング書き込みでファイル作成
+        start_time = datetime.now()
+        file_path = self.csv_writer.write_results_streaming(large_results)
+        end_time = datetime.now()
+        
+        # ファイルが正常に作成されることを確認
+        self.assertTrue(os.path.exists(file_path))
+        
+        # パフォーマンス測定（5000件を5秒以内に処理できることを確認）
+        processing_time = (end_time - start_time).total_seconds()
+        self.assertLess(processing_time, 5.0, f"ストリーミング処理が遅すぎます: {processing_time}秒")
+        
+        # ファイル内容の検証
+        with open(file_path, 'r', encoding='utf-8-sig') as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+            
+        # 正しい件数が書き込まれていることを確認
+        self.assertEqual(len(rows), 5000)
+          # 先頭と末尾のデータが正しいことを確認
+        self.assertEqual(rows[0]['タイトル'], '大量データテストタイトル0')
+        self.assertEqual(rows[4999]['タイトル'], '大量データテストタイトル4999')
+    
+    def test_streaming_vs_standard_consistency(self):
+        """ストリーミング書き込みと標準書き込みの一貫性テスト"""
+        # 標準書き込みでファイル作成
+        standard_file = self.csv_writer.write_results(self.test_results)
+        
+        # ストリーミング書き込みでファイル作成
+        streaming_file = self.csv_writer.write_results_streaming(self.test_results)
+        
+        # 両ファイルの内容が同じであることを確認
+        with open(standard_file, 'r', encoding='utf-8-sig') as f1, \
+             open(streaming_file, 'r', encoding='utf-8-sig') as f2:
+            standard_content = f1.read()
+            streaming_content = f2.read()
+            
+        self.assertEqual(standard_content, streaming_content)
+    
+    def test_streaming_batch_processing(self):
+        """ストリーミング書き込みのバッチ処理テスト"""
+        # 2500件のテストデータ（バッチサイズ1000を想定）
+        batch_results = []
+        for i in range(2500):
+            result = SearchResult(
+                title=f"バッチテストタイトル{i}",
+                url=f"https://batch{i}.com",
+                snippet=f"バッチテスト用スニペット{i}",
+                search_query=f"バッチテストクエリ{i}",
+                rank=1,
+                display_link=f"batch{i}.com"
+            )
+            batch_results.append(result)
+        
+        # ストリーミング書き込み実行
+        file_path = self.csv_writer.write_results_streaming(batch_results)
+        
+        # ファイル内容検証
+        with open(file_path, 'r', encoding='utf-8-sig') as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+        
+        # 全データが正しく書き込まれていることを確認
+        self.assertEqual(len(rows), 2500)
+          # バッチ境界のデータが正しいことを確認
+        self.assertEqual(rows[999]['タイトル'], 'バッチテストタイトル999')   # 1番目のバッチ最後
+        self.assertEqual(rows[1000]['タイトル'], 'バッチテストタイトル1000') # 2番目のバッチ最初
+        self.assertEqual(rows[1999]['タイトル'], 'バッチテストタイトル1999') # 2番目のバッチ最後
+        self.assertEqual(rows[2000]['タイトル'], 'バッチテストタイトル2000') # 3番目のバッチ最初
 
 
 if __name__ == '__main__':

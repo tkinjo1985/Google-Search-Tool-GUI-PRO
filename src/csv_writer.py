@@ -236,6 +236,121 @@ class CSVWriter:
             
             raise CSVWriterError(f"CSV出力に失敗しました: {e}")
     
+    def write_results_streaming(self, results: List[SearchResult], 
+                               filename: str = None,
+                               prevent_overwrite: bool = True,
+                               batch_size: int = 1000) -> str:
+        """
+        検索結果をストリーミング処理でCSV形式で出力（大量データ対応）
+        
+        Args:
+            results: 検索結果のリスト
+            filename: 出力ファイル名（省略時は自動生成）
+            prevent_overwrite: 既存ファイルの上書きを防ぐかどうか
+            batch_size: バッチ処理サイズ
+            
+        Returns:
+            作成されたCSVファイルのパス
+        """
+        if not results:
+            self.logger.warning("書き込む検索結果がありません")
+            return ""
+        
+        # ファイル名の生成
+        if filename is None:
+            filename = self.generate_filename("streaming")
+          # 重複ファイル名チェック
+        file_path = os.path.join(self.output_directory, filename)
+        if prevent_overwrite:
+            file_path = self._prevent_overwrite(file_path)
+        
+        # 権限チェック
+        if not self._check_file_permissions(file_path):
+            raise CSVWriterError(f"ファイル書き込み権限がありません: {file_path}")
+          # 推定ファイルサイズでディスク容量チェック
+        estimated_size = len(results) * 500  # 1行あたり約500バイトと推定
+        if not self._check_disk_space(estimated_size):
+            self.logger.warning("ディスク容量が不足している可能性があります")
+        
+        try:
+            self.logger.info(f"ストリーミングCSV出力開始: {file_path} ({len(results):,} 件)")
+            
+            # バッファサイズを最適化（64KB）
+            buffer_size = 64 * 1024
+            
+            with open(file_path, 'w', newline='', encoding=self.encoding, buffering=buffer_size) as csvfile:
+                writer = csv.writer(csvfile, quoting=csv.QUOTE_ALL)
+                
+                # ヘッダー行を書き込み（標準書き込みと同じヘッダーを使用）
+                headers = SearchResult.get_csv_headers()
+                writer.writerow(headers)
+                
+                # バッチ処理でデータを書き込み
+                batch = []
+                processed_count = 0
+                
+                for i, result in enumerate(results):
+                    # SearchResultの標準的なCSV行データを使用
+                    row_data = result.to_csv_row()
+                    batch.append(row_data)
+                    
+                    # バッチサイズに達したら書き込み
+                    if len(batch) >= batch_size:
+                        writer.writerows(batch)
+                        csvfile.flush()  # バッファを強制的にフラッシュ
+                        processed_count += len(batch)
+                        batch = []
+                        
+                        # 進捗ログ（10000行ごと）
+                        if processed_count % 10000 == 0:
+                            self.logger.info(f"ストリーミング進捗: {processed_count:,} / {len(results):,} 行処理済み")
+                
+                # 残りのバッチを書き込み
+                if batch:
+                    writer.writerows(batch)
+                    csvfile.flush()
+                    processed_count += len(batch)
+                
+                self.logger.info(f"ストリーミングCSV出力完了: {processed_count:,} 行処理")
+            
+            return file_path
+            
+        except Exception as e:
+            self.logger.error(f"ストリーミングCSV出力エラー: {e}")
+            # エラー時はファイルを削除
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                except:
+                    pass
+            raise CSVWriterError(f"ストリーミングCSV出力に失敗しました: {e}")
+    
+    def write_results_optimized(self, results: List[SearchResult], 
+                               filename: str = None,
+                               prevent_overwrite: bool = True) -> str:
+        """
+        最適化された検索結果CSV出力（データサイズに応じて処理方法を選択）
+        
+        Args:
+            results: 検索結果のリスト
+            filename: 出力ファイル名（省略時は自動生成）
+            prevent_overwrite: 既存ファイルの上書きを防ぐかどうか
+            
+        Returns:
+            作成されたCSVファイルのパス
+        """
+        if not results:
+            self.logger.warning("書き込む検索結果がありません")
+            return ""
+        
+        # データサイズに応じて処理方法を選択
+        if len(results) > 1000:
+            self.logger.info(f"大量データです。ストリーミング処理を使用します ({len(results):,} 件)")
+            return self.write_results_streaming(results, filename, prevent_overwrite)
+        else:
+            self.logger.info(f"標準処理を使用します ({len(results):,} 件)")
+            return self.write_results(results, filename, prevent_overwrite)
+
     def append_result(self, result: SearchResult, filename: str) -> bool:
         """
         既存のCSVファイルに検索結果を追加
