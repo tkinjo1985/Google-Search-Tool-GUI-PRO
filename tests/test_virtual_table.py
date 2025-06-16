@@ -366,7 +366,7 @@ class TestVirtualTableWidget(unittest.TestCase):
 
 class TestVirtualTablePerformance(unittest.TestCase):
     """Virtual Table パフォーマンステスト"""
-      def setUp(self):
+    def setUp(self):
         """テスト前の設定"""
         from virtual_table_widget import VirtualTableWidget
         self.widget = VirtualTableWidget()
